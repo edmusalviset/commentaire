@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Écoute — vote de groupe</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --panel-raised: #f4f5f6;
+    --line: #dcdfe3;
+    --line-strong: #b9bfc7;
+    --ink: #15181c;
+    --ink-dim: #6b7280;
+    --accent: #1d3557;
+    --accent-warm: #a8681c;
+    --danger: #b3261e;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Space Grotesk', sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+
+  header{
+    padding:16px 20px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+    position:sticky;
+    top:0;
+    background:var(--bg);
+    z-index:10;
+  }
+  header h1{
+    font-size:15px;
+    font-weight:700;
+    letter-spacing:.01em;
+    margin:0;
+    color:var(--ink);
+  }
+  .status-line{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--ink-dim);
+  }
+  .status-dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--danger);
+    flex:none;
+    transition:background .2s;
+  }
+  .status-dot.ouvert{ background:var(--accent); }
+
+  main{
+    flex:1;
+    max-width:760px;
+    width:100%;
+    margin:0 auto;
+    padding:20px 20px 60px;
+  }
+
+  .panel-label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    letter-spacing:.12em;
+    color:var(--ink-dim);
+    margin:0 0 14px;
+    padding-bottom:8px;
+    border-bottom:1px solid var(--line);
+    text-transform:uppercase;
+  }
+
+  /* ---- Sélecteur de groupe ---- */
+  .groupe-select{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-bottom:24px;
+  }
+  .groupe-chip{
+    width:38px; height:38px;
+    display:flex; align-items:center; justify-content:center;
+    background:#ffffff;
+    border:1px solid var(--line-strong);
+    color:var(--ink);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:14px;
+    border-radius:4px;
+    cursor:pointer;
+  }
+  .groupe-chip:hover{ border-color:var(--accent); }
+  .groupe-chip.selected{
+    background:var(--accent);
+    border-color:var(--accent);
+    color:#ffffff;
+    font-weight:700;
+  }
+  .groupe-verrouille{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:'IBM Plex Mono', monospace; font-size:12px;
+    color:var(--ink-dim); margin-bottom:24px;
+    background:var(--panel-raised); border:1px solid var(--line);
+    border-radius:4px; padding:8px 12px;
+  }
+  .groupe-verrouille strong{ color:var(--ink); font-size:14px; }
+
+  /* ---- Message d'attente / clôture ---- */
+  .message-etat{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:22px;
+    text-align:center;
+    color:var(--ink-dim);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+    line-height:1.6;
+  }
+
+  /* ---- Vocab picker (repris de commentaire-ecoute-app) ---- */
+  .section-divider{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10px;
+    letter-spacing:.1em;
+    color:var(--accent-warm);
+    text-transform:uppercase;
+    margin:22px 0 12px;
+    padding-top:12px;
+    border-top:1px dashed var(--line);
+  }
+  .section-divider:first-of-type{ margin-top:0; padding-top:0; border-top:none; }
+
+  .vocab-grid{ display:flex; flex-direction:column; gap:8px; }
+  .vocab-toggle{
+    width:100%;
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:#ffffff;
+    border:1px solid var(--line-strong);
+    border-radius:4px;
+    padding:9px 10px;
+    cursor:pointer;
+    text-align:left;
+    color:var(--ink);
+    font-family:'Space Grotesk', sans-serif;
+  }
+  .vocab-toggle:hover{ border-color:var(--accent); }
+  .vocab-toggle.open{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(29,53,87,.12); }
+  .vocab-toggle .vt-name{ font-size:12px; color:var(--accent); font-weight:600; flex:none; width:210px; }
+  .vocab-toggle .vt-value{ flex:1; font-size:13px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .vocab-toggle .vt-value.empty{ color:#9aa1aa; }
+  .vocab-toggle .vt-chevron{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-dim); transition:transform .15s; flex:none; }
+  .vocab-toggle.open .vt-chevron{ transform:rotate(180deg); }
+
+  .vocab-panel{
+    display:none;
+    background:var(--panel-raised);
+    border:1px solid var(--line);
+    border-top:none;
+    border-radius:0 0 4px 4px;
+    padding:12px;
+    max-height:300px;
+    overflow:auto;
+  }
+  .vocab-panel.open{ display:block; }
+
+  .vocab-group{ margin-bottom:10px; }
+  .vocab-group:last-child{ margin-bottom:0; }
+  .vocab-group-label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:9.5px;
+    letter-spacing:.08em;
+    color:var(--accent-warm);
+    margin-bottom:6px;
+    text-transform:uppercase;
+  }
+  .chip-grid{ display:flex; flex-wrap:wrap; gap:6px; }
+  .chip{
+    background:#ffffff;
+    border:1px solid var(--line-strong);
+    color:var(--ink);
+    font-size:12px;
+    padding:5px 10px;
+    border-radius:20px;
+    cursor:pointer;
+    line-height:1.2;
+  }
+  .chip:hover{ border-color:var(--accent); }
+  .chip.selected{ background:var(--accent); border-color:var(--accent); color:#ffffff; font-weight:500; }
+
+  .btn-row{ display:flex; gap:8px; margin-top:24px; }
+  .btn-row button{
+    flex:1;
+    padding:13px 8px;
+    background:var(--accent);
+    border:1px solid var(--accent);
+    color:#ffffff;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    letter-spacing:.06em;
+    font-weight:700;
+    border-radius:4px;
+    cursor:pointer;
+  }
+  .btn-row button:hover{ opacity:.85; }
+  .btn-row button:disabled{ opacity:.4; cursor:default; }
+  .btn-row #editBtn{
+    background:#ffffff; border:1px solid var(--line-strong); color:var(--ink); flex:none; width:170px;
+  }
+  .btn-row #editBtn:hover{ border-color:var(--accent); color:var(--accent); opacity:1; }
+
+  .confirmation{
+    margin-top:16px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    color:var(--accent);
+    text-align:center;
+    min-height:16px;
+  }
+
+  footer{
+    text-align:center;
+    padding:16px 20px 24px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10px;
+    color:var(--ink-dim);
+    border-top:1px solid var(--line);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ÉCOUTE — VOTE DE GROUPE</h1>
+  <div class="status-line">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Connexion…</span>
+  </div>
+</header>
+
+<main>
+  <p class="panel-label">Numéro de groupe</p>
+  <div class="groupe-select" id="groupeSelect"></div>
+  <div class="groupe-verrouille" id="groupeVerrouille" style="display:none;"></div>
+
+  <div id="contenuVote"></div>
+</main>
+
+<footer>jm voiront — outil pédagogique — usage classe</footer>
+
+<script>
+/* ================= Connexion Supabase (commune) ================= */
+const SUPABASE_URL = "https://bqwdphdmeugixmwgnioy.supabase.co";
+const SUPABASE_KEY = "sb_publishable_GFw0dXrnZa-EJ8l3UxJ8Iw_QATaIi2Q";
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Identifiant propre à cet onglet/appareil, généré à chaque chargement de page.
+// Sert uniquement à repérer si un autre appareil est déjà positionné sur le même numéro.
+const DEVICE_ID = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now());
+
+async function getEcouteOuverte(){
+  const { data, error } = await supabaseClient
+    .from("ecoutes").select("*")
+    .eq("ouvert", true)
+    .order("cree_at", { ascending:false })
+    .limit(1).maybeSingle();
+  if(error){ console.error(error); return null; }
+  return data;
+}
+
+async function envoyerReponse(ecouteId, groupeNumero, donnees, termine=false){
+  const { data, error } = await supabaseClient
+    .from("reponses")
+    .upsert({
+      ecoute_id: ecouteId,
+      groupe_numero: groupeNumero,
+      donnees,
+      termine,
+      soumis_at: termine ? new Date().toISOString() : null
+    }, { onConflict: "ecoute_id,groupe_numero" })
+    .select().single();
+  if(error){ console.error(error); return null; }
+  return data;
+}
+
+async function getMaReponse(ecouteId, groupeNumero){
+  const { data, error } = await supabaseClient
+    .from("reponses").select("*")
+    .eq("ecoute_id", ecouteId)
+    .eq("groupe_numero", groupeNumero)
+    .maybeSingle();
+  if(error){ console.error(error); return null; }
+  return data;
+}
+
+/* Signale au professeur que ce groupe est connecté (salle d'attente avant le vote) */
+async function signalerPresence(groupeNumero){
+  const { error } = await supabaseClient
+    .from("presence")
+    .upsert({ groupe_numero: groupeNumero, vu_a: new Date().toISOString(), device_id: DEVICE_ID }, { onConflict: "groupe_numero" });
+  if(error) console.error(error);
+}
+
+/* Vérifie si un AUTRE appareil est déjà positionné sur ce numéro (moins de 10s)
+   — calcul entièrement côté serveur, aucune horloge locale utilisée. */
+async function verifierConflitGroupe(n){
+  const { data, error } = await supabaseClient.rpc('get_presence_groupe', { p_groupe: n });
+  if(error || !data || data.length === 0) return null;
+  const ligne = data[0];
+  if(ligne.device_id && ligne.device_id !== DEVICE_ID) return ligne;
+  return null;
+}
+
+/* ================= Vocabulaire (source : MEMENTO_VOCABULAIRE_2025, sans "Autre") ================= */
+const VOCAB_MAIN = {
+  caractere: { label:"Caractère", groups:[
+    { items:["romantique","élégant","relaxant","féérique","rêveur","poétique","déprimant","inquiétant","monotone","répétitif","lourd","sombre","tendu","agressif","héroïque","énergique","majestueux","animé","militaire","passionné","amusant","enjoué","sautillant","virtuose","contrasté","variable"] }
+  ]},
+  tempo: { label:"Tempo", groups:[
+    { items:["non pulsé","non mesuré","contrasté","variable"] },
+    { group_label:"Lent", items:["largo","adagio"] },
+    { group_label:"Modéré", items:["andante","moderato"] },
+    { group_label:"Rapide", items:["allegro","presto"] }
+  ]},
+  nuances: { label:"Nuances", groups:[
+    { items:["pianissimo (pp)","piano (p)","mezzo piano (mp)","mezzo forte (mf)","forte (f)","fortissimo (ff)","crescendo","decrescendo","contrasté","variable"] }
+  ]},
+  effectifVocal: { label:"Effectif vocal", groups:[
+    { group_label:"Langue", items:["français","anglais","allemand","espagnol","italien","latin","grec","vocalises","onomatopées"] },
+    { group_label:"Mode d'expression", items:["chanté","parlé","crié","chanté-parlé (récitatif)"] },
+    { group_label:"Solistes", items:["enfant","femme","homme"] },
+    { items:["soprano","mezzo-soprano","alto","contreténor","ténor","baryton","basse"] },
+    { group_label:"Chœur", items:["chœur d'hommes","chœur de femmes","chœur d'enfants","chœur mixte"] },
+    { group_label:"Interprétation", items:["a cappella","accompagné"] }
+  ]},
+  effectifSolistes: { label:"Effectif instr. — solistes", groups:[
+    { group_label:"Vents", items:["vents"] },
+    { group_label:"Vents — Cuivres", items:["cuivres","trompette","trombone","cor","tuba"] },
+    { group_label:"Vents — Bois", items:["bois","flûte","clarinette","saxophone","hautbois","basson"] },
+    { group_label:"Cordes", items:["cordes"] },
+    { group_label:"Cordes — Frottées", items:["cordes frottées","violon","alto","violoncelle","contrebasse"] },
+    { group_label:"Cordes — Pincées", items:["cordes pincées","guitare","harpe","clavecin"] },
+    { group_label:"Cordes — Frappées", items:["piano"] },
+    { group_label:"Percussions", items:["percussions","timbales","cymbales","grosse caisse","caisse claire","batterie"] },
+    { group_label:"Électronique", items:["électronique","synthétiseur","échantillonneur","boîte à rythme"] }
+  ]},
+  effectifEnsembles: { label:"Effectif instr. — ensembles", groups:[
+    { items:["fanfare","harmonie","orchestre symphonique","orchestre à cordes","orchestre de chambre"] }
+  ]},
+  epoque: { label:"Époque", groups:[
+    { items:["moyen-âge (Ve-XVe s.)","renaissance (XVIe s.)","baroque (XVIIe s.)","classique (XVIIIe s.)","romantique (XIXe s.)","moderne (jusqu'à 1950)","contemporain (après 1950)"] }
+  ]}
+};
+
+const VOCAB_EXTRA = {
+  plansSonores: { label:"Plans sonores", groups:[
+    { group_label:"Texture", items:["monodie","polyphonie"] },
+    { group_label:"Plans", items:["mélodie","accompagnement","contrechant"] },
+    { group_label:"Procédés", items:["ostinato harmonique","ostinato rythmique","bourdon","organum","canon","fugue"] },
+    { group_label:"Orientation", items:["polyphonie verticale","polyphonie horizontale"] }
+  ]},
+  forme: { label:"Forme", groups:[
+    { items:["répétition (AAA)","variations (A1A2A3)","forme binaire (AABB)","forme ternaire (ABA)","forme rondo (ABACA)","forme sonate","forme libre","forme continue (ABCD)","introduction","pont","coda","couplet","refrain","chorus"] }
+  ]},
+  genre: { label:"Genre", groups:[
+    { items:["opéra","opérette","comédie musicale","messe","requiem","oratorio","gospel","air","chanson","symphonie","concerto","sonate","ouverture","fugue","canon","danse","musique de circonstance","musique de film"] }
+  ]},
+  style: { label:"Style", groups:[
+    { items:["musique religieuse","musique classique","musique populaire","musique concrète","musique électroacoustique","musique électronique","EDM","electronica","musique du monde","country","blues","jazz","rock","pop","reggae","techno","hip-hop","variété"] }
+  ]}
+};
+
+const ALL_VOCAB = Object.assign({}, VOCAB_MAIN, VOCAB_EXTRA);
+
+/* ================= État ================= */
+let groupeNumero = null;
+let groupeNumeroCharge = null; // numéro de groupe pour lequel le formulaire affiché a été chargé
+let ecouteActive = null;
+let selections = {};
+let verrouille = false; // true après validation, tant qu'on n'a pas cliqué "Modifier"
+
+function resetSelections(){
+  selections = {};
+  Object.keys(ALL_VOCAB).forEach(k => selections[k] = new Set());
+}
+resetSelections();
+
+/* ================= Sélecteur de groupe ================= */
+const groupeSelect = document.getElementById('groupeSelect');
+for(let i = 1; i <= 10; i++){
+  const chip = document.createElement('button');
+  chip.type = 'button';
+  chip.className = 'groupe-chip';
+  chip.textContent = i;
+  chip.addEventListener('click', () => choisirGroupe(i));
+  groupeSelect.appendChild(chip);
+}
+
+async function choisirGroupe(n){
+  if(n === groupeNumero) return;
+  const conflit = await verifierConflitGroupe(n);
+  if(conflit){
+    const ok = confirm(`Le groupe ${n} semble déjà utilisé par un autre appareil (vu il y a ${conflit.secondes_depuis}s).\nChoisir quand même ce numéro ?`);
+    if(!ok) return;
+  }
+  groupeNumero = n;
+  [...groupeSelect.children].forEach((c, idx) => c.classList.toggle('selected', idx === n-1));
+  signalerPresence(n);
+  await rafraichirVote();
+}
+
+function mettreAJourVerrouillageSelecteur(){
+  const verrouilleParEcoute = !!(groupeNumero && ecouteActive);
+  groupeSelect.style.display = verrouilleParEcoute ? 'none' : '';
+  const label = document.getElementById('groupeVerrouille');
+  if(verrouilleParEcoute){
+    label.style.display = '';
+    label.innerHTML = `Tu votes en tant que <strong>groupe ${groupeNumero}</strong> — figé pour ce vote.`;
+  }else{
+    label.style.display = 'none';
+  }
+}
+
+/* ================= Rendu du contenu principal ================= */
+const contenuVote = document.getElementById('contenuVote');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+
+function joinNaturally(items){
+  const arr = Array.from(items);
+  if(arr.length === 0) return '';
+  if(arr.length === 1) return arr[0];
+  return arr.slice(0, -1).join(', ') + ' et ' + arr[arr.length - 1];
+}
+
+function buildVocabField(container, key, def){
+  const wrap = document.createElement('div');
+  wrap.className = 'vocab-field';
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'vocab-toggle';
+  toggle.innerHTML = `<span class="vt-name">${def.label}</span><span class="vt-value empty" id="vt-${key}">Cliquer pour choisir</span><span class="vt-chevron">▾</span>`;
+
+  const panelEl = document.createElement('div');
+  panelEl.className = 'vocab-panel';
+
+  def.groups.forEach(g => {
+    const groupEl = document.createElement('div');
+    groupEl.className = 'vocab-group';
+    if(g.group_label){
+      const lab = document.createElement('div');
+      lab.className = 'vocab-group-label';
+      lab.textContent = g.group_label;
+      groupEl.appendChild(lab);
+    }
+    const grid = document.createElement('div');
+    grid.className = 'chip-grid';
+    g.items.forEach(item => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip';
+      chip.textContent = item;
+      if(selections[key].has(item)) chip.classList.add('selected');
+      chip.addEventListener('click', () => {
+        if(verrouille) return;
+        if(selections[key].has(item)){
+          selections[key].delete(item);
+          chip.classList.remove('selected');
+        }else{
+          selections[key].add(item);
+          chip.classList.add('selected');
+        }
+        updateVocabValue(key);
+      });
+      grid.appendChild(chip);
+    });
+    groupEl.appendChild(grid);
+    panelEl.appendChild(groupEl);
+  });
+
+  toggle.addEventListener('click', () => {
+    if(verrouille) return;
+    const isOpen = panelEl.classList.contains('open');
+    document.querySelectorAll('.vocab-panel.open').forEach(p => {
+      if(p !== panelEl){ p.classList.remove('open'); p.previousElementSibling.classList.remove('open'); }
+    });
+    panelEl.classList.toggle('open', !isOpen);
+    toggle.classList.toggle('open', !isOpen);
+  });
+
+  wrap.appendChild(toggle);
+  wrap.appendChild(panelEl);
+  container.appendChild(wrap);
+}
+
+function updateVocabValue(key){
+  const el = document.getElementById('vt-' + key);
+  if(!el) return;
+  const text = joinNaturally(selections[key]);
+  el.textContent = text || 'Cliquer pour choisir';
+  el.classList.toggle('empty', !text);
+}
+
+function afficherFormulaire(){
+  contenuVote.innerHTML = `
+    <div class="section-divider">Paramètres essentiels</div>
+    <div id="vocabFieldsMain" class="vocab-grid"></div>
+    <div class="section-divider">Paramètres complémentaires</div>
+    <div id="vocabFieldsExtra" class="vocab-grid"></div>
+    <div class="btn-row">
+      <button id="editBtn" type="button" style="display:none;">MODIFIER</button>
+      <button id="validerBtn" type="button">VALIDER MES RÉPONSES</button>
+    </div>
+    <div class="confirmation" id="confirmation"></div>
+  `;
+  const mainContainer = document.getElementById('vocabFieldsMain');
+  const extraContainer = document.getElementById('vocabFieldsExtra');
+  Object.entries(VOCAB_MAIN).forEach(([key, def]) => buildVocabField(mainContainer, key, def));
+  Object.entries(VOCAB_EXTRA).forEach(([key, def]) => buildVocabField(extraContainer, key, def));
+
+  document.getElementById('validerBtn').addEventListener('click', validerReponses);
+  document.getElementById('editBtn').addEventListener('click', () => {
+    verrouille = false;
+    setVerrouillageUI();
+  });
+}
+
+function setVerrouillageUI(){
+  const validerBtn = document.getElementById('validerBtn');
+  const editBtn = document.getElementById('editBtn');
+  if(!validerBtn) return;
+  validerBtn.textContent = verrouille ? 'RÉPONSES ENVOYÉES' : 'VALIDER MES RÉPONSES';
+  validerBtn.disabled = verrouille;
+  editBtn.style.display = verrouille ? '' : 'none';
+}
+
+async function validerReponses(){
+  if(!ecouteActive || !groupeNumero) return;
+  const donnees = {};
+  Object.keys(ALL_VOCAB).forEach(k => { donnees[k] = Array.from(selections[k]); });
+  const res = await envoyerReponse(ecouteActive.id, groupeNumero, donnees, true);
+  const confirmation = document.getElementById('confirmation');
+  if(res){
+    verrouille = true;
+    setVerrouillageUI();
+    confirmation.textContent = '✓ Réponses envoyées au professeur.';
+  }else{
+    confirmation.textContent = '✗ Échec de l\'envoi, réessaie.';
+  }
+}
+
+function afficherMessage(texte){
+  contenuVote.innerHTML = `<div class="message-etat">${texte}</div>`;
+}
+
+/* ================= Cycle de rafraîchissement ================= */
+async function rafraichirVote(){
+  if(!groupeNumero){
+    afficherMessage('Sélectionne le numéro de ton groupe ci-dessus pour commencer.');
+    mettreAJourVerrouillageSelecteur();
+    return;
+  }
+
+  const ecoute = await getEcouteOuverte();
+
+  if(!ecoute){
+    ecouteActive = null;
+    statusDot.classList.remove('ouvert');
+    statusText.textContent = 'En attente d\'ouverture du vote';
+    afficherMessage('Le professeur n\'a pas encore ouvert de vote.<br>Reste sur cette page, ça va s\'actualiser tout seul.');
+    mettreAJourVerrouillageSelecteur();
+    return;
+  }
+
+  const nouvelleEcoute = !ecouteActive || ecouteActive.id !== ecoute.id;
+  const changementGroupe = groupeNumero !== groupeNumeroCharge;
+  ecouteActive = ecoute;
+  statusDot.classList.add('ouvert');
+  statusText.textContent = 'Vote en cours';
+  mettreAJourVerrouillageSelecteur();
+
+  if(nouvelleEcoute || changementGroupe || !document.getElementById('validerBtn')){
+    resetSelections();
+    verrouille = false;
+    groupeNumeroCharge = groupeNumero;
+
+    // Si le groupe a déjà une réponse enregistrée pour cette écoute
+    // (page rechargée, ou reconnexion), on la recharge AVANT de
+    // construire les champs, pour que les cases cochées s'affichent
+    // correctement dès la construction.
+    const existante = await getMaReponse(ecoute.id, groupeNumero);
+    if(existante){
+      Object.keys(ALL_VOCAB).forEach(k => {
+        (existante.donnees[k] || []).forEach(v => selections[k].add(v));
+      });
+      if(existante.termine) verrouille = true;
+    }
+
+    afficherFormulaire();
+    Object.keys(ALL_VOCAB).forEach(k => updateVocabValue(k));
+    setVerrouillageUI();
+  }
+}
+
+/* ================= Polling de l'état de l'écoute + présence ================= */
+setInterval(() => {
+  if(groupeNumero){
+    rafraichirVote();
+    signalerPresence(groupeNumero);
+  }
+}, 4000);
+</script>
+</body>
+</html>
